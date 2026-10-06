@@ -12,8 +12,6 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     zip \
     unzip \
-    nodejs \
-    npm \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
         pdo \
@@ -28,6 +26,11 @@ RUN apt-get update && apt-get install -y \
         xml \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js 20 LTS via NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
@@ -37,7 +40,12 @@ WORKDIR /var/www
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --ignore-platform-reqs
+RUN COMPOSER_ALLOW_SUPERUSER=1 composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction \
+    --no-scripts \
+    --ignore-platform-reqs
 
 # Copy package.json
 COPY package.json package-lock.json ./
@@ -54,13 +62,13 @@ RUN chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www/bootstrap/cache
 
 # Run post-install composer scripts
-RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
+RUN COMPOSER_ALLOW_SUPERUSER=1 composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
 
-EXPOSE $PORT
+EXPOSE 8000
 
 CMD php artisan config:cache && \
     php artisan route:cache && \
     php artisan view:cache && \
     php artisan migrate --force && \
     php artisan storage:link --force && \
-    php artisan serve --host=0.0.0.0 --port=$PORT
+    php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
